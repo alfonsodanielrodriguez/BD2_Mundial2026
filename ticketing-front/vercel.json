@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "RAILWAY_URL_AQUI/api/:path*"
+      "destination": "https://bd2mundial2026-production.up.railway.app/api/:path*"
     },
     {
       "source": "/(.*)",
