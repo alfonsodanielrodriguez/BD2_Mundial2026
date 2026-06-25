@@ -54,7 +54,10 @@ public class Entrada {
     @Column(name = "qr_token_expira_en")
     private LocalDateTime qrTokenExpiraEn;
 
-    public enum Estado { activa, consumida, transferida_pendiente }
+    @Column(name = "id_compra")
+    private Integer idCompra;
+
+    public enum Estado { activa, consumida, transferida_pendiente, reservada }
 
     public Integer getIdEntrada() { return idEntrada; }
     public void setIdEntrada(Integer v) { this.idEntrada = v; }
@@ -88,4 +91,7 @@ public class Entrada {
 
     public LocalDateTime getQrTokenExpiraEn() { return qrTokenExpiraEn; }
     public void setQrTokenExpiraEn(LocalDateTime v) { this.qrTokenExpiraEn = v; }
+
+    public Integer getIdCompra() { return idCompra; }
+    public void setIdCompra(Integer v) { this.idCompra = v; }
 }

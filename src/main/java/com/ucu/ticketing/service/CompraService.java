@@ -75,6 +75,75 @@ public class CompraService {
         return compra;
     }
 
+    @Transactional
+    public Compra iniciar(String emailUsuario, Integer idEncuentro, String letraSector, int cantidad) {
+        if (cantidad < 1 || cantidad > 5)
+            throw new RuntimeException("Solo se pueden comprar entre 1 y 5 entradas por transacción");
+
+        UsuarioGeneral usuario = usuarioRepo.findById(emailUsuario)
+            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        Encuentro encuentro = encuentroRepo.findById(idEncuentro)
+            .orElseThrow(() -> new RuntimeException("Encuentro no encontrado"));
+
+        Sector.SectorId sectorId = new Sector.SectorId(letraSector, encuentro.getEstadio().getIdEstadio());
+        Sector sector = sectorRepo.findById(sectorId)
+            .orElseThrow(() -> new RuntimeException("Sector no encontrado"));
+
+        int entradasOcupadas = entradaRepo.countByEncuentroIdEncuentroAndLetraSector(idEncuentro, letraSector);
+        if (entradasOcupadas + cantidad > sector.getAforo())
+            throw new RuntimeException("No hay suficiente aforo disponible en el sector");
+
+        BigDecimal subtotal = sector.getPrecio().multiply(BigDecimal.valueOf(cantidad));
+        BigDecimal comision = new BigDecimal("5.00");
+        BigDecimal total = subtotal.multiply(BigDecimal.ONE.add(comision.divide(BigDecimal.valueOf(100))));
+
+        Compra compra = new Compra();
+        compra.setUsuario(usuario);
+        compra.setFecha(LocalDate.now());
+        compra.setHora(LocalTime.now());
+        compra.setEstado(Compra.Estado.pendiente);
+        compra.setComisionAplicada(comision);
+        compra.setMontoTotal(total);
+        compraRepo.save(compra);
+
+        for (int i = 0; i < cantidad; i++) {
+            Entrada entrada = new Entrada();
+            entrada.setEncuentro(encuentro);
+            entrada.setLetraSector(letraSector);
+            entrada.setIdEstadio(encuentro.getEstadio().getIdEstadio());
+            entrada.setMontoSector(sector.getPrecio());
+            entrada.setPropietarioActual(usuario);
+            entrada.setEstado(Entrada.Estado.reservada);
+            entrada.setCantidadTransferencias((byte) 0);
+            entrada.setIdCompra(compra.getIdCompra());
+            entradaRepo.save(entrada);
+        }
+
+        return compra;
+    }
+
+    @Transactional
+    public Compra confirmar(Integer idCompra, String emailUsuario) {
+        Compra compra = compraRepo.findById(idCompra)
+            .orElseThrow(() -> new RuntimeException("Compra no encontrada"));
+
+        if (!compra.getUsuario().getEmail().equals(emailUsuario))
+            throw new RuntimeException("No autorizado");
+
+        if (compra.getEstado() != Compra.Estado.pendiente)
+            throw new RuntimeException("La compra no está en estado pendiente");
+
+        List<Entrada> entradas = entradaRepo.findByIdCompra(idCompra);
+        entradas.forEach(e -> {
+            e.setEstado(Entrada.Estado.activa);
+            entradaRepo.save(e);
+        });
+
+        compra.setEstado(Compra.Estado.paga);
+        return compraRepo.save(compra);
+    }
+
     public List<Compra> misCompras(String email) {
         return compraRepo.findByUsuarioEmail(email);
     }

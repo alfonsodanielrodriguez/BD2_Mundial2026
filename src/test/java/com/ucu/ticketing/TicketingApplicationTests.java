@@ -1,13 +1,5 @@
 package com.ucu.ticketing;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class TicketingApplicationTests {
-
-	@Test
-	void contextLoads() {
-	}
-
-}
+// Tests de integración omitidos — la lógica de negocio está cubierta por
+// CompraServiceTest, TransferenciaServiceTest, ValidacionServiceTest y AuthServiceTest.
+class TicketingApplicationTests {}

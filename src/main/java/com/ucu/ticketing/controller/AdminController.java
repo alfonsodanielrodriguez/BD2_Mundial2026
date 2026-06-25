@@ -3,6 +3,8 @@ package com.ucu.ticketing.controller;
 import com.ucu.ticketing.model.*;
 import com.ucu.ticketing.repository.*;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
@@ -17,11 +19,20 @@ public class AdminController {
     private final AdministradorRepository adminRepo;
     private final TieneHabilitadoRepository tieneHabilitadoRepo;
     private final EntradaRepository entradaRepo;
+    private final FuncionarioRepository funcionarioRepo;
+    private final UsuarioRepository usuarioRepo;
+    private final DispositivoRepository dispositivoRepo;
+    private final TieneAsignadoRepository tieneAsignadoRepo;
+    private final PasswordEncoder passwordEncoder;
+    private final AsignadoARepository asignadoARepo;
 
     public AdminController(EstadioRepository estadioRepo, SectorRepository sectorRepo,
                         EncuentroRepository encuentroRepo, EquipoRepository equipoRepo,
                         AdministradorRepository adminRepo, TieneHabilitadoRepository tieneHabilitadoRepo,
-                        EntradaRepository entradaRepo) {
+                        EntradaRepository entradaRepo, FuncionarioRepository funcionarioRepo,
+                        UsuarioRepository usuarioRepo, DispositivoRepository dispositivoRepo,
+                        TieneAsignadoRepository tieneAsignadoRepo, PasswordEncoder passwordEncoder,
+                        AsignadoARepository asignadoARepo) {
         this.estadioRepo = estadioRepo;
         this.sectorRepo = sectorRepo;
         this.encuentroRepo = encuentroRepo;
@@ -29,6 +40,12 @@ public class AdminController {
         this.adminRepo = adminRepo;
         this.tieneHabilitadoRepo = tieneHabilitadoRepo;
         this.entradaRepo = entradaRepo;
+        this.funcionarioRepo = funcionarioRepo;
+        this.usuarioRepo = usuarioRepo;
+        this.dispositivoRepo = dispositivoRepo;
+        this.tieneAsignadoRepo = tieneAsignadoRepo;
+        this.passwordEncoder = passwordEncoder;
+        this.asignadoARepo = asignadoARepo;
     }
 
    @PostMapping("/estadios")
@@ -76,7 +93,10 @@ public class AdminController {
             .orElseThrow(() -> new RuntimeException("Sector no encontrado"));
 
         if (body.get("precio") != null) {
-            sector.setPrecio(new java.math.BigDecimal(body.get("precio").toString()));
+            java.math.BigDecimal precio = new java.math.BigDecimal(body.get("precio").toString());
+            if (precio.compareTo(java.math.BigDecimal.ZERO) < 0)
+                return ResponseEntity.badRequest().body(Map.of("error", "El precio no puede ser negativo"));
+            sector.setPrecio(precio);
             sectorRepo.save(sector);
         }
 
@@ -157,6 +177,27 @@ public class AdminController {
         return ResponseEntity.ok(estadioRepo.findAll());
     }
 
+    @PutMapping("/estadios/{id}")
+    public ResponseEntity<?> editarEstadio(@PathVariable Integer id,
+                                           @RequestBody Map<String, Object> body) {
+        Estadio e = estadioRepo.findById(id)
+            .orElseThrow(() -> new RuntimeException("Estadio no encontrado"));
+        if (body.get("nombre") != null) e.setNombre((String) body.get("nombre"));
+        if (body.get("direccion") != null) e.setDireccion((String) body.get("direccion"));
+        if (body.get("pais") != null) e.setPais((String) body.get("pais"));
+        return ResponseEntity.ok(estadioRepo.save(e));
+    }
+
+    @PutMapping("/encuentros/{id}")
+    public ResponseEntity<?> editarEncuentro(@PathVariable Integer id,
+                                             @RequestBody Map<String, Object> body) {
+        Encuentro enc = encuentroRepo.findById(id)
+            .orElseThrow(() -> new RuntimeException("Encuentro no encontrado"));
+        if (body.get("fecha") != null) enc.setFecha(java.time.LocalDate.parse((String) body.get("fecha")));
+        if (body.get("hora") != null) enc.setHora(java.time.LocalTime.parse((String) body.get("hora")));
+        return ResponseEntity.ok(encuentroRepo.save(enc));
+    }
+
     @GetMapping("/equipos")
     public ResponseEntity<?> listarEquipos() {
         return ResponseEntity.ok(equipoRepo.findAll());
@@ -177,6 +218,87 @@ public class AdminController {
             return ResponseEntity.badRequest().body(Map.of("error", "No se puede eliminar el encuentro porque ya tiene entradas vendidas."));
         tieneHabilitadoRepo.deleteAll(tieneHabilitadoRepo.findByIdEncuentro(id));
         encuentroRepo.deleteById(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/funcionarios")
+    public ResponseEntity<?> listarFuncionarios() {
+        return ResponseEntity.ok(funcionarioRepo.findAll());
+    }
+
+    @PostMapping("/funcionarios")
+    public ResponseEntity<?> crearFuncionario(@RequestBody Map<String, Object> body) {
+        String email = (String) body.get("email");
+        if (usuarioRepo.existsById(email))
+            return ResponseEntity.badRequest().body(Map.of("error", "Ya existe un usuario con ese email"));
+
+        // Generar legajo autoincremental LEG-001, LEG-002, ...
+        int nextNum = funcionarioRepo.findAll().stream()
+            .filter(fn -> fn.getNumeroLegajo() != null && fn.getNumeroLegajo().startsWith("LEG-"))
+            .mapToInt(fn -> {
+                try { return Integer.parseInt(fn.getNumeroLegajo().substring(4)); }
+                catch (NumberFormatException e) { return 0; }
+            })
+            .max().orElse(0) + 1;
+        String numeroLegajo = String.format("LEG-%03d", nextNum);
+
+        FuncionarioValidacion f = new FuncionarioValidacion();
+        f.setEmail(email);
+        f.setPaisDocumentoIdentidad((String) body.getOrDefault("paisDocumentoIdentidad", "N/A"));
+        f.setTipoDocumento((String) body.getOrDefault("tipoDocumento", "N/A"));
+        f.setNumeroDocumento((String) body.getOrDefault("numeroDocumento", "N/A"));
+        f.setPaisDireccion((String) body.getOrDefault("paisDireccion", "N/A"));
+        f.setLocalidad((String) body.getOrDefault("localidad", "N/A"));
+        f.setCalle((String) body.getOrDefault("calle", "N/A"));
+        f.setNumeroDireccion((String) body.getOrDefault("numeroDireccion", "N/A"));
+        f.setCodigoPostal((String) body.getOrDefault("codigoPostal", "N/A"));
+        f.setNumeroLegajo(numeroLegajo);
+        f.setPasswordHash(passwordEncoder.encode((String) body.get("password")));
+        funcionarioRepo.save(f);
+
+        // Crear y asignar dispositivo automáticamente
+        String idDispositivo = "DISP-" + numeroLegajo.substring(4); // DISP-001
+        if (!dispositivoRepo.existsById(idDispositivo)) {
+            DispositivoEscaneo disp = new DispositivoEscaneo();
+            disp.setIdDispositivo(idDispositivo);
+            dispositivoRepo.save(disp);
+        }
+        TieneAsignado ta = new TieneAsignado();
+        ta.setEmailFuncionario(email);
+        ta.setIdDispositivo(idDispositivo);
+        tieneAsignadoRepo.save(ta);
+
+        return ResponseEntity.ok(Map.of(
+            "email", f.getEmail(),
+            "numeroLegajo", f.getNumeroLegajo(),
+            "idDispositivo", idDispositivo
+        ));
+    }
+
+    @GetMapping("/funcionarios/{email}/encuentros")
+    public ResponseEntity<?> encuentrosFuncionario(@PathVariable String email) {
+        return ResponseEntity.ok(asignadoARepo.findByEmailFuncionario(email));
+    }
+
+    @PostMapping("/funcionarios/{email}/encuentros/{idEncuentro}")
+    public ResponseEntity<?> asignarEncuentro(@PathVariable String email, @PathVariable Integer idEncuentro) {
+        if (!funcionarioRepo.existsById(email))
+            return ResponseEntity.badRequest().body(Map.of("error", "Funcionario no encontrado"));
+        if (!encuentroRepo.existsById(idEncuentro))
+            return ResponseEntity.badRequest().body(Map.of("error", "Encuentro no encontrado"));
+        if (asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(email, idEncuentro))
+            return ResponseEntity.badRequest().body(Map.of("error", "Ya está asignado a este encuentro"));
+
+        AsignadoA a = new AsignadoA();
+        a.setEmailFuncionario(email);
+        a.setIdEncuentro(idEncuentro);
+        return ResponseEntity.ok(asignadoARepo.save(a));
+    }
+
+    @Transactional
+    @DeleteMapping("/funcionarios/{email}/encuentros/{idEncuentro}")
+    public ResponseEntity<?> desasignarEncuentro(@PathVariable String email, @PathVariable Integer idEncuentro) {
+        asignadoARepo.deleteByEmailFuncionarioAndIdEncuentro(email, idEncuentro);
         return ResponseEntity.ok().build();
     }
 

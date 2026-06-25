@@ -3,11 +3,13 @@ package com.ucu.ticketing.controller;
 import com.ucu.ticketing.model.UsuarioGeneral;
 import com.ucu.ticketing.repository.AdministradorRepository;
 import com.ucu.ticketing.repository.FuncionarioRepository;
+import com.ucu.ticketing.repository.TieneAsignadoRepository;
 import com.ucu.ticketing.service.AuthService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -17,12 +19,14 @@ public class AuthController {
     private final AuthService authService;
     private final AdministradorRepository administradorRepo;
     private final FuncionarioRepository funcionarioRepo;
+    private final TieneAsignadoRepository tieneAsignadoRepo;
 
     public AuthController(AuthService authService, AdministradorRepository administradorRepo,
-                        FuncionarioRepository funcionarioRepo) {
+                          FuncionarioRepository funcionarioRepo, TieneAsignadoRepository tieneAsignadoRepo) {
         this.authService = authService;
         this.administradorRepo = administradorRepo;
         this.funcionarioRepo = funcionarioRepo;
+        this.tieneAsignadoRepo = tieneAsignadoRepo;
     }
 
     @PostMapping("/registro")
@@ -43,13 +47,24 @@ public class AuthController {
         String password = (String) body.get("password");
         return ResponseEntity.ok(authService.registrar(usuario, password));
     }
+
     @GetMapping("/perfil")
     public ResponseEntity<?> perfil(Principal principal) {
         boolean esAdmin = administradorRepo.existsById(principal.getName());
         boolean esFuncionario = funcionarioRepo.existsById(principal.getName());
-        return ResponseEntity.ok(Map.of(
-            "email", principal.getName(),
-            "rol", esAdmin ? "ADMIN" : esFuncionario ? "FUNCIONARIO" : "USER"
-        ));
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("email", principal.getName());
+        resp.put("rol", esAdmin ? "ADMIN" : esFuncionario ? "FUNCIONARIO" : "USER");
+
+        if (esFuncionario) {
+            funcionarioRepo.findById(principal.getName()).ifPresent(f ->
+                resp.put("numeroLegajo", f.getNumeroLegajo())
+            );
+            var asignados = tieneAsignadoRepo.findByEmailFuncionario(principal.getName());
+            resp.put("idDispositivo", asignados.isEmpty() ? "" : asignados.get(0).getIdDispositivo());
+        }
+
+        return ResponseEntity.ok(resp);
     }
 }

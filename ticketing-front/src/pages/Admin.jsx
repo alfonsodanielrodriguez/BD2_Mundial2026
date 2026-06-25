@@ -24,11 +24,24 @@ export default function Admin() {
   const [encuentroForm, setEncuentroForm] = useState({
     fecha: '', hora: '', idEstadio: '', paisLocal: '', paisVisitante: '', emailAdmin: email
   })
+  const [funcionarios, setFuncionarios] = useState([])
+  const [funcionarioForm, setFuncionarioForm] = useState({
+    email: '', password: '',
+    paisDocumentoIdentidad: '', tipoDocumento: '', numeroDocumento: ''
+  })
+  const [editandoEstadio, setEditandoEstadio] = useState(null)
+  const [estadioEditForm, setEstadioEditForm] = useState({ nombre: '', direccion: '', pais: '' })
+  const [funcionarioExpandido, setFuncionarioExpandido] = useState(null)
+  const [encuentrosFuncionario, setEncuentrosFuncionario] = useState({})
+  const [asignandoEncuentro, setAsignandoEncuentro] = useState('')
+  const [historialValidaciones, setHistorialValidaciones] = useState([])
 
   useEffect(() => {
     axios.get('/api/admin/equipos', getAuth()).then(r => setEquipos(r.data))
     axios.get('/api/admin/estadios', getAuth()).then(r => setEstadios(r.data))
     axios.get('/api/encuentros', getAuth()).then(r => setEncuentros(r.data))
+    axios.get('/api/admin/funcionarios', getAuth()).then(r => setFuncionarios(r.data)).catch(() => {})
+    axios.get('/api/validacion/historial/todos', getAuth()).then(r => setHistorialValidaciones(r.data)).catch(() => {})
   }, [])
 
   const msg = (texto, tipo = 'ok') => { 
@@ -116,7 +129,60 @@ export default function Admin() {
     msg(`Sector ${letra} deshabilitado`)
   }
 
-  const tabs = ['equipos', 'estadios', 'encuentros', 'sectores']
+  const crearFuncionario = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await axios.post('/api/admin/funcionarios', funcionarioForm, getAuth())
+      const r = await axios.get('/api/admin/funcionarios', getAuth())
+      setFuncionarios(r.data)
+      msg(`Funcionario creado — Legajo: ${res.data.numeroLegajo}, Dispositivo: ${res.data.idDispositivo}`)
+      setFuncionarioForm({ email: '', password: '', paisDocumentoIdentidad: '', tipoDocumento: '', numeroDocumento: '' })
+    } catch (err) {
+      msg(err.response?.data?.error || 'Error al crear funcionario', 'error')
+    }
+  }
+
+  const expandirFuncionario = async (email) => {
+    if (funcionarioExpandido === email) { setFuncionarioExpandido(null); return }
+    setFuncionarioExpandido(email)
+    const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros`, getAuth())
+    setEncuentrosFuncionario(prev => ({ ...prev, [email]: r.data }))
+  }
+
+  const asignarEncuentro = async (email) => {
+    if (!asignandoEncuentro) return
+    try {
+      await axios.post(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros/${asignandoEncuentro}`, {}, getAuth())
+      const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros`, getAuth())
+      setEncuentrosFuncionario(prev => ({ ...prev, [email]: r.data }))
+      setAsignandoEncuentro('')
+      msg('Encuentro asignado')
+    } catch (err) {
+      msg(err.response?.data?.error || 'Error al asignar', 'error')
+    }
+  }
+
+  const desasignarEncuentro = async (email, idEncuentro) => {
+    await axios.delete(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros/${idEncuentro}`, getAuth())
+    const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros`, getAuth())
+    setEncuentrosFuncionario(prev => ({ ...prev, [email]: r.data }))
+    msg('Encuentro desasignado')
+  }
+
+  const editarEstadio = async (e) => {
+    e.preventDefault()
+    try {
+      await axios.put(`/api/admin/estadios/${editandoEstadio}`, estadioEditForm, getAuth())
+      const r = await axios.get('/api/admin/estadios', getAuth())
+      setEstadios(r.data)
+      msg('Estadio actualizado')
+      setEditandoEstadio(null)
+    } catch (err) {
+      msg(err.response?.data?.error || 'Error al editar', 'error')
+    }
+  }
+
+  const tabs = ['equipos', 'estadios', 'encuentros', 'sectores', 'funcionarios', 'validaciones']
   const inputClass = "w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
   const btnPrimary = "w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 rounded-lg transition-colors"
 
@@ -188,12 +254,33 @@ export default function Admin() {
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
               <h3 className="font-semibold text-gray-700 mb-3">Estadios registrados</h3>
               {estadios.length === 0 ? <p className="text-gray-400 text-sm">Sin estadios.</p> :
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {estadios.map(es => (
-                    <div key={es.idEstadio} className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">🏟️ <strong>{es.nombre}</strong> — {es.direccion}, {es.pais}</span>
-                      <button onClick={() => eliminarEstadio(es.idEstadio)}
-                        className="text-red-500 hover:text-red-700 text-xs">Eliminar</button>
+                    <div key={es.idEstadio}>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600">🏟️ <strong>{es.nombre}</strong> — {es.direccion}, {es.pais}</span>
+                        <div className="flex gap-2">
+                          <button onClick={() => {
+                            setEditandoEstadio(es.idEstadio)
+                            setEstadioEditForm({ nombre: es.nombre, direccion: es.direccion, pais: es.pais })
+                          }} className="text-blue-500 hover:text-blue-700 text-xs">Editar</button>
+                          <button onClick={() => eliminarEstadio(es.idEstadio)}
+                            className="text-red-500 hover:text-red-700 text-xs">Eliminar</button>
+                        </div>
+                      </div>
+                      {editandoEstadio === es.idEstadio && (
+                        <form onSubmit={editarEstadio} className="mt-2 space-y-2 bg-blue-50 rounded-lg p-3">
+                          {[['nombre', 'Nombre'], ['direccion', 'Dirección'], ['pais', 'País']].map(([name, label]) => (
+                            <input key={name} placeholder={label} value={estadioEditForm[name]}
+                              onChange={e => setEstadioEditForm({ ...estadioEditForm, [name]: e.target.value })}
+                              className={inputClass} />
+                          ))}
+                          <div className="flex gap-2">
+                            <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-4 py-2 rounded-lg transition-colors">Guardar</button>
+                            <button type="button" onClick={() => setEditandoEstadio(null)} className="text-gray-500 text-xs px-4 py-2 rounded-lg border border-gray-300">Cancelar</button>
+                          </div>
+                        </form>
+                      )}
                     </div>
                   ))}
                 </div>}
@@ -263,6 +350,108 @@ export default function Admin() {
           </div>
         )}
 
+        {tab === 'funcionarios' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <h3 className="font-semibold text-gray-700 mb-3">Funcionarios registrados</h3>
+              {funcionarios.length === 0 ? <p className="text-gray-400 text-sm">Sin funcionarios.</p> :
+                <div className="space-y-2">
+                  {funcionarios.map(f => (
+                    <div key={f.email} className="border-b border-gray-50 last:border-0 pb-3 last:pb-0">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-sm text-gray-700 font-medium">{f.email}</p>
+                          <p className="text-xs text-gray-400">Legajo: {f.numeroLegajo} — Dispositivo: DISP-{f.numeroLegajo?.substring(4)}</p>
+                        </div>
+                        <button onClick={() => expandirFuncionario(f.email)}
+                          className="text-blue-500 hover:text-blue-700 text-xs">
+                          {funcionarioExpandido === f.email ? 'Cerrar' : 'Encuentros'}
+                        </button>
+                      </div>
+                      {funcionarioExpandido === f.email && (
+                        <div className="mt-2 bg-blue-50 rounded-lg p-3 space-y-2">
+                          <p className="text-xs font-medium text-blue-700">Encuentros asignados</p>
+                          {(encuentrosFuncionario[f.email] || []).length === 0
+                            ? <p className="text-xs text-gray-400">Sin encuentros asignados.</p>
+                            : (encuentrosFuncionario[f.email] || []).map(a => (
+                              <div key={a.idEncuentro} className="flex justify-between items-center">
+                                <span className="text-xs text-gray-600">
+                                  {a.encuentro?.equipoLocal?.pais} vs {a.encuentro?.equipoVisitante?.pais} — {a.encuentro?.fecha}
+                                </span>
+                                <button onClick={() => desasignarEncuentro(f.email, a.idEncuentro)}
+                                  className="text-red-400 hover:text-red-600 text-xs">Quitar</button>
+                              </div>
+                            ))
+                          }
+                          <div className="flex gap-2 pt-1">
+                            <select value={asignandoEncuentro}
+                              onChange={e => setAsignandoEncuentro(e.target.value)}
+                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+                              <option value="">Asignar encuentro...</option>
+                              {encuentros.map(enc => (
+                                <option key={enc.idEncuentro} value={enc.idEncuentro}>
+                                  {enc.equipoLocal?.pais} vs {enc.equipoVisitante?.pais} — {enc.fecha}
+                                </option>
+                              ))}
+                            </select>
+                            <button onClick={() => asignarEncuentro(f.email)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
+                              Asignar
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>}
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <h3 className="font-semibold text-gray-700 mb-3">Crear funcionario</h3>
+              <p className="text-xs text-gray-400">El legajo y dispositivo se asignan automáticamente.</p>
+              <form onSubmit={crearFuncionario} className="space-y-3">
+                {[
+                  ['email', 'Email'],
+                  ['password', 'Contraseña'],
+                  ['paisDocumentoIdentidad', 'País del documento'],
+                  ['tipoDocumento', 'Tipo de documento'],
+                  ['numeroDocumento', 'Número de documento'],
+                ].map(([name, label]) => (
+                  <input key={name} placeholder={label}
+                    type={name === 'password' ? 'password' : 'text'}
+                    value={funcionarioForm[name]}
+                    onChange={e => setFuncionarioForm({ ...funcionarioForm, [name]: e.target.value })}
+                    className={inputClass} />
+                ))}
+                <button type="submit" className={btnPrimary}>Crear funcionario</button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {tab === 'validaciones' && (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-gray-700">Historial de validaciones</h3>
+            {historialValidaciones.length === 0
+              ? <p className="text-gray-400 text-sm">Sin validaciones registradas.</p>
+              : historialValidaciones.map((v, i) => (
+                <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-semibold text-green-900">Entrada #{v.idEntrada}</p>
+                      <p className="text-xs text-gray-600">
+                        {v.encuentro?.equipoLocal?.pais} vs {v.encuentro?.equipoVisitante?.pais} — {v.encuentro?.fecha}
+                      </p>
+                      <p className="text-xs text-gray-500">Funcionario: {v.funcionario?.email}</p>
+                      <p className="text-xs text-gray-400">Dispositivo: {v.idDispositivo}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">{v.hora}</span>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+
         {tab === 'sectores' && (
           <div className="space-y-4">
             <select value={encuentroSeleccionado}
@@ -291,7 +480,7 @@ export default function Admin() {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <input type="number" placeholder="Precio"
+                        <input type="number" placeholder="Precio" min="0"
                           value={preciosSector[letra] || ''}
                           onChange={e => setPreciosSector({ ...preciosSector, [letra]: e.target.value })}
                           className="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />

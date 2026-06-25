@@ -10,6 +10,8 @@ import java.util.List;
 public interface EntradaRepository extends JpaRepository<Entrada, Integer> {
     List<Entrada> findByPropietarioActualEmail(String email);
     int countByEncuentroIdEncuentroAndLetraSector(Integer idEncuentro, String letraSector);
+    java.util.Optional<Entrada> findByQrTokenActual(String qrTokenActual);
+    List<Entrada> findByIdCompra(Integer idCompra);
 
     boolean existsByEncuentroIdEncuentro(Integer idEncuentro);
 

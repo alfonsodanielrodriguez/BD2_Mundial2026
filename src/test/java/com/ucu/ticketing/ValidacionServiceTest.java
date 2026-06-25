@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -26,7 +27,8 @@ class ValidacionServiceTest {
     @Mock EntradaRepository entradaRepo;
     @Mock ValidaRepository validaRepo;
     @Mock FuncionarioRepository funcionarioRepo;
-    @Mock DispositivoRepository dispositivoRepo;
+    @Mock TieneAsignadoRepository tieneAsignadoRepo;
+    @Mock AsignadoARepository asignadoARepo;
 
     @InjectMocks ValidacionService validacionService;
 
@@ -35,21 +37,30 @@ class ValidacionServiceTest {
     private static final String TOKEN = "token-valido-123";
     private static final String DISPOSITIVO = "DISP-001";
     private static final String EMAIL_FUNCIONARIO = "funcionario@test.com";
+    private static final int ID_ENCUENTRO = 1;
 
     @BeforeEach
     void setUp() {
+        Encuentro encuentro = new Encuentro();
+        encuentro.setIdEncuentro(ID_ENCUENTRO);
+
         entrada = new Entrada();
         entrada.setIdEntrada(1);
         entrada.setEstado(Entrada.Estado.activa);
         entrada.setQrTokenActual(TOKEN);
         entrada.setQrTokenExpiraEn(LocalDateTime.now().plusMinutes(5));
-        entrada.setEncuentro(new Encuentro());
+        entrada.setEncuentro(encuentro);
 
         funcionario = new FuncionarioValidacion();
         funcionario.setEmail(EMAIL_FUNCIONARIO);
 
-        when(entradaRepo.findById(1)).thenReturn(Optional.of(entrada));
-        when(dispositivoRepo.existsById(DISPOSITIVO)).thenReturn(true);
+        TieneAsignado ta = new TieneAsignado();
+        ta.setIdDispositivo(DISPOSITIVO);
+
+        when(entradaRepo.findByQrTokenActual(TOKEN)).thenReturn(Optional.of(entrada));
+        when(entradaRepo.findByQrTokenActual(argThat(t -> !TOKEN.equals(t)))).thenReturn(Optional.empty());
+        when(asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(EMAIL_FUNCIONARIO, ID_ENCUENTRO)).thenReturn(true);
+        when(tieneAsignadoRepo.findByEmailFuncionario(EMAIL_FUNCIONARIO)).thenReturn(List.of(ta));
         when(funcionarioRepo.findById(EMAIL_FUNCIONARIO)).thenReturn(Optional.of(funcionario));
         when(entradaRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(validaRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -57,13 +68,14 @@ class ValidacionServiceTest {
 
     @Test
     void escanear_exitoso_marcaEntradaConsumidaYRegistraAuditoria() {
-        String resultado = validacionService.escanear(1, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO);
+        String resultado = validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO);
 
         assertEquals("Entrada validada correctamente", resultado);
         assertEquals(Entrada.Estado.consumida, entrada.getEstado());
         verify(validaRepo).save(argThat(v ->
             v.getCodigoAceptado().equals(TOKEN) &&
-            v.getFuncionario().equals(funcionario)
+            v.getFuncionario().equals(funcionario) &&
+            v.getIdDispositivo().equals(DISPOSITIVO)
         ));
     }
 
@@ -72,7 +84,7 @@ class ValidacionServiceTest {
         entrada.setEstado(Entrada.Estado.consumida);
 
         RuntimeException ex = assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(1, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO));
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
         assertTrue(ex.getMessage().contains("consumida"));
     }
 
@@ -81,14 +93,23 @@ class ValidacionServiceTest {
         entrada.setEstado(Entrada.Estado.transferida_pendiente);
 
         RuntimeException ex = assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(1, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO));
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
         assertTrue(ex.getMessage().contains("transferencia pendiente"));
     }
 
     @Test
-    void escanear_tokenIncorrecto_lanzaExcepcion() {
+    void escanear_entradaReservada_lanzaExcepcion() {
+        entrada.setEstado(Entrada.Estado.reservada);
+
         RuntimeException ex = assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(1, DISPOSITIVO, "token-falso", EMAIL_FUNCIONARIO));
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
+        assertTrue(ex.getMessage().contains("confirmada"));
+    }
+
+    @Test
+    void escanear_tokenInvalido_lanzaExcepcion() {
+        RuntimeException ex = assertThrows(RuntimeException.class,
+            () -> validacionService.escanear("token-falso", EMAIL_FUNCIONARIO));
         assertTrue(ex.getMessage().contains("inválido"));
     }
 
@@ -97,34 +118,34 @@ class ValidacionServiceTest {
         entrada.setQrTokenExpiraEn(LocalDateTime.now().minusSeconds(1));
 
         RuntimeException ex = assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(1, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO));
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
         assertTrue(ex.getMessage().contains("expirado"));
     }
 
     @Test
-    void escanear_dispositivoNoAutorizado_lanzaExcepcion() {
-        when(dispositivoRepo.existsById("DISP-FALSO")).thenReturn(false);
+    void escanear_funcionarioNoAsignadoAlEncuentro_lanzaExcepcion() {
+        when(asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(EMAIL_FUNCIONARIO, ID_ENCUENTRO)).thenReturn(false);
 
         RuntimeException ex = assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(1, "DISP-FALSO", TOKEN, EMAIL_FUNCIONARIO));
-        assertTrue(ex.getMessage().contains("no autorizado"));
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
+        assertTrue(ex.getMessage().contains("asignado"));
     }
 
     @Test
-    void escanear_entradaNoExiste_lanzaExcepcion() {
-        when(entradaRepo.findById(999)).thenReturn(Optional.empty());
+    void escanear_funcionarioSinDispositivo_lanzaExcepcion() {
+        when(tieneAsignadoRepo.findByEmailFuncionario(EMAIL_FUNCIONARIO)).thenReturn(List.of());
 
-        assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(999, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO));
+        RuntimeException ex = assertThrows(RuntimeException.class,
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
+        assertTrue(ex.getMessage().contains("dispositivo"));
     }
 
     @Test
     void escanear_exitoso_noVuelveAValidarMismaEntrada() {
-        validacionService.escanear(1, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO);
+        validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO);
 
-        // Simular segundo intento: la entrada ya está consumida
         RuntimeException ex = assertThrows(RuntimeException.class,
-            () -> validacionService.escanear(1, DISPOSITIVO, TOKEN, EMAIL_FUNCIONARIO));
+            () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));
         assertTrue(ex.getMessage().contains("consumida"));
     }
 }

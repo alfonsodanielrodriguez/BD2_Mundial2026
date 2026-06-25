@@ -5,6 +5,7 @@ import com.ucu.ticketing.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class ValidacionService {
@@ -12,20 +13,23 @@ public class ValidacionService {
     private final EntradaRepository entradaRepo;
     private final ValidaRepository validaRepo;
     private final FuncionarioRepository funcionarioRepo;
-    private final DispositivoRepository dispositivoRepo;
+    private final TieneAsignadoRepository tieneAsignadoRepo;
+    private final AsignadoARepository asignadoARepo;
 
     public ValidacionService(EntradaRepository entradaRepo, ValidaRepository validaRepo,
-                             FuncionarioRepository funcionarioRepo, DispositivoRepository dispositivoRepo) {
+                             FuncionarioRepository funcionarioRepo, TieneAsignadoRepository tieneAsignadoRepo,
+                             AsignadoARepository asignadoARepo) {
         this.entradaRepo = entradaRepo;
         this.validaRepo = validaRepo;
         this.funcionarioRepo = funcionarioRepo;
-        this.dispositivoRepo = dispositivoRepo;
+        this.tieneAsignadoRepo = tieneAsignadoRepo;
+        this.asignadoARepo = asignadoARepo;
     }
 
     @Transactional
-    public String escanear(Integer idEntrada, String idDispositivo, String codigoQr, String emailFuncionario) {
-        Entrada entrada = entradaRepo.findById(idEntrada)
-            .orElseThrow(() -> new RuntimeException("Entrada no encontrada"));
+    public String escanear(String codigoQr, String emailFuncionario) {
+        Entrada entrada = entradaRepo.findByQrTokenActual(codigoQr)
+            .orElseThrow(() -> new RuntimeException("QR inválido — entrada no encontrada"));
 
         if (entrada.getEstado() == Entrada.Estado.consumida)
             throw new RuntimeException("La entrada ya fue consumida");
@@ -33,14 +37,20 @@ public class ValidacionService {
         if (entrada.getEstado() == Entrada.Estado.transferida_pendiente)
             throw new RuntimeException("La entrada tiene una transferencia pendiente");
 
-        if (!codigoQr.equals(entrada.getQrTokenActual()))
-            throw new RuntimeException("QR inválido o expirado");
+        if (entrada.getEstado() == Entrada.Estado.reservada)
+            throw new RuntimeException("La entrada no ha sido confirmada (compra pendiente)");
 
         if (entrada.getQrTokenExpiraEn() != null && LocalDateTime.now().isAfter(entrada.getQrTokenExpiraEn()))
             throw new RuntimeException("QR expirado");
 
-        if (!dispositivoRepo.existsById(idDispositivo))
-            throw new RuntimeException("Dispositivo no autorizado");
+        Integer idEncuentro = entrada.getEncuentro().getIdEncuentro();
+        if (!asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(emailFuncionario, idEncuentro))
+            throw new RuntimeException("El funcionario no está asignado a este encuentro");
+
+        List<TieneAsignado> asignados = tieneAsignadoRepo.findByEmailFuncionario(emailFuncionario);
+        if (asignados.isEmpty())
+            throw new RuntimeException("El funcionario no tiene un dispositivo asignado");
+        String idDispositivo = asignados.get(0).getIdDispositivo();
 
         FuncionarioValidacion funcionario = funcionarioRepo.findById(emailFuncionario)
             .orElseThrow(() -> new RuntimeException("Funcionario no encontrado"));
@@ -50,7 +60,7 @@ public class ValidacionService {
 
         Valida valida = new Valida();
         valida.setIdDispositivo(idDispositivo);
-        valida.setIdEntrada(idEntrada);
+        valida.setIdEntrada(entrada.getIdEntrada());
         valida.setEncuentro(entrada.getEncuentro());
         valida.setFuncionario(funcionario);
         valida.setCodigoAceptado(codigoQr);
