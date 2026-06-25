@@ -6,6 +6,9 @@ import java.util.List;
 
 public interface AsignadoARepository extends JpaRepository<AsignadoA, AsignadoA.AsignadoAId> {
     List<AsignadoA> findByEmailFuncionario(String emailFuncionario);
-    boolean existsByEmailFuncionarioAndIdEncuentro(String emailFuncionario, Integer idEncuentro);
-    void deleteByEmailFuncionarioAndIdEncuentro(String emailFuncionario, Integer idEncuentro);
+    List<AsignadoA> findByEmailFuncionarioAndIdEncuentro(String emailFuncionario, Integer idEncuentro);
+    boolean existsByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(
+        String emailFuncionario, Integer idEncuentro, String letraSector, Integer idEstadio);
+    void deleteByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(
+        String emailFuncionario, Integer idEncuentro, String letraSector, Integer idEstadio);
 }

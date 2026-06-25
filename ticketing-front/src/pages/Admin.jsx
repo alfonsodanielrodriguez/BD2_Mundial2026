@@ -32,8 +32,10 @@ export default function Admin() {
   const [editandoEstadio, setEditandoEstadio] = useState(null)
   const [estadioEditForm, setEstadioEditForm] = useState({ nombre: '', direccion: '', pais: '' })
   const [funcionarioExpandido, setFuncionarioExpandido] = useState(null)
-  const [encuentrosFuncionario, setEncuentrosFuncionario] = useState({})
+  const [asignacionesFuncionario, setAsignacionesFuncionario] = useState({})
   const [asignandoEncuentro, setAsignandoEncuentro] = useState('')
+  const [asignandoSector, setAsignandoSector] = useState('')
+  const [sectoresDelEncuentroAsignando, setSectoresDelEncuentroAsignando] = useState([])
   const [historialValidaciones, setHistorialValidaciones] = useState([])
 
   useEffect(() => {
@@ -142,31 +144,54 @@ export default function Admin() {
     }
   }
 
-  const expandirFuncionario = async (email) => {
-    if (funcionarioExpandido === email) { setFuncionarioExpandido(null); return }
-    setFuncionarioExpandido(email)
-    const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros`, getAuth())
-    setEncuentrosFuncionario(prev => ({ ...prev, [email]: r.data }))
+  const expandirFuncionario = async (emailFun) => {
+    if (funcionarioExpandido === emailFun) { setFuncionarioExpandido(null); return }
+    setFuncionarioExpandido(emailFun)
+    setAsignandoEncuentro('')
+    setAsignandoSector('')
+    setSectoresDelEncuentroAsignando([])
+    const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(emailFun)}/asignaciones`, getAuth())
+    setAsignacionesFuncionario(prev => ({ ...prev, [emailFun]: r.data }))
   }
 
-  const asignarEncuentro = async (email) => {
-    if (!asignandoEncuentro) return
+  const onEncuentroAsignandoChange = async (idEnc) => {
+    setAsignandoEncuentro(idEnc)
+    setAsignandoSector('')
+    if (!idEnc) { setSectoresDelEncuentroAsignando([]); return }
+    const r = await axios.get(`/api/admin/encuentros/${idEnc}/sectores`, getAuth())
+    setSectoresDelEncuentroAsignando(r.data)
+  }
+
+  const asignarSector = async (emailFun) => {
+    if (!asignandoEncuentro || !asignandoSector) return
     try {
-      await axios.post(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros/${asignandoEncuentro}`, {}, getAuth())
-      const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros`, getAuth())
-      setEncuentrosFuncionario(prev => ({ ...prev, [email]: r.data }))
+      await axios.post(
+        `/api/admin/funcionarios/${encodeURIComponent(emailFun)}/encuentros/${asignandoEncuentro}/sectores/${asignandoSector}`,
+        {}, getAuth()
+      )
+      const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(emailFun)}/asignaciones`, getAuth())
+      setAsignacionesFuncionario(prev => ({ ...prev, [emailFun]: r.data }))
       setAsignandoEncuentro('')
-      msg('Encuentro asignado')
+      setAsignandoSector('')
+      setSectoresDelEncuentroAsignando([])
+      msg('Sector asignado correctamente')
     } catch (err) {
       msg(err.response?.data?.error || 'Error al asignar', 'error')
     }
   }
 
-  const desasignarEncuentro = async (email, idEncuentro) => {
-    await axios.delete(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros/${idEncuentro}`, getAuth())
-    const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(email)}/encuentros`, getAuth())
-    setEncuentrosFuncionario(prev => ({ ...prev, [email]: r.data }))
-    msg('Encuentro desasignado')
+  const desasignarSector = async (emailFun, idEncuentro, letraSector) => {
+    try {
+      await axios.delete(
+        `/api/admin/funcionarios/${encodeURIComponent(emailFun)}/encuentros/${idEncuentro}/sectores/${letraSector}`,
+        getAuth()
+      )
+      const r = await axios.get(`/api/admin/funcionarios/${encodeURIComponent(emailFun)}/asignaciones`, getAuth())
+      setAsignacionesFuncionario(prev => ({ ...prev, [emailFun]: r.data }))
+      msg('Asignación eliminada')
+    } catch (err) {
+      msg(err.response?.data?.error || 'Error al desasignar', 'error')
+    }
   }
 
   const editarEstadio = async (e) => {
@@ -370,34 +395,46 @@ export default function Admin() {
                       </div>
                       {funcionarioExpandido === f.email && (
                         <div className="mt-2 bg-blue-50 rounded-lg p-3 space-y-2">
-                          <p className="text-xs font-medium text-blue-700">Encuentros asignados</p>
-                          {(encuentrosFuncionario[f.email] || []).length === 0
-                            ? <p className="text-xs text-gray-400">Sin encuentros asignados.</p>
-                            : (encuentrosFuncionario[f.email] || []).map(a => (
-                              <div key={a.idEncuentro} className="flex justify-between items-center">
+                          <p className="text-xs font-medium text-blue-700">Sectores asignados</p>
+                          {(asignacionesFuncionario[f.email] || []).length === 0
+                            ? <p className="text-xs text-gray-400">Sin asignaciones.</p>
+                            : (asignacionesFuncionario[f.email] || []).map(a => (
+                              <div key={`${a.idEncuentro}-${a.letraSector}`} className="flex justify-between items-center">
                                 <span className="text-xs text-gray-600">
-                                  {a.encuentro?.equipoLocal?.pais} vs {a.encuentro?.equipoVisitante?.pais} — {a.encuentro?.fecha}
+                                  Encuentro #{a.idEncuentro} — Sector <strong>{a.letraSector}</strong>
                                 </span>
-                                <button onClick={() => desasignarEncuentro(f.email, a.idEncuentro)}
+                                <button onClick={() => desasignarSector(f.email, a.idEncuentro, a.letraSector)}
                                   className="text-red-400 hover:text-red-600 text-xs">Quitar</button>
                               </div>
                             ))
                           }
-                          <div className="flex gap-2 pt-1">
+                          <div className="space-y-1.5 pt-1">
                             <select value={asignandoEncuentro}
-                              onChange={e => setAsignandoEncuentro(e.target.value)}
-                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none">
-                              <option value="">Asignar encuentro...</option>
+                              onChange={e => onEncuentroAsignandoChange(e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+                              <option value="">Seleccioná encuentro...</option>
                               {encuentros.map(enc => (
                                 <option key={enc.idEncuentro} value={enc.idEncuentro}>
                                   {enc.equipoLocal?.pais} vs {enc.equipoVisitante?.pais} — {enc.fecha}
                                 </option>
                               ))}
                             </select>
-                            <button onClick={() => asignarEncuentro(f.email)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
-                              Asignar
-                            </button>
+                            {asignandoEncuentro && (
+                              <div className="flex gap-2">
+                                <select value={asignandoSector}
+                                  onChange={e => setAsignandoSector(e.target.value)}
+                                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+                                  <option value="">Sector habilitado...</option>
+                                  {sectoresDelEncuentroAsignando.map(s => (
+                                    <option key={s.letra} value={s.letra}>Sector {s.letra}</option>
+                                  ))}
+                                </select>
+                                <button onClick={() => asignarSector(f.email)}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
+                                  Asignar
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

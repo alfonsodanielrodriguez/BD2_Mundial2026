@@ -44,8 +44,11 @@ public class ValidacionService {
             throw new RuntimeException("QR expirado");
 
         Integer idEncuentro = entrada.getEncuentro().getIdEncuentro();
-        if (!asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(emailFuncionario, idEncuentro))
-            throw new RuntimeException("El funcionario no está asignado a este encuentro");
+        String letraSector = entrada.getLetraSector();
+        Integer idEstadio = entrada.getIdEstadio();
+        if (!asignadoARepo.existsByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(
+                emailFuncionario, idEncuentro, letraSector, idEstadio))
+            throw new RuntimeException("El funcionario no está asignado al sector " + letraSector + " de este encuentro");
 
         List<TieneAsignado> asignados = tieneAsignadoRepo.findByEmailFuncionario(emailFuncionario);
         if (asignados.isEmpty())

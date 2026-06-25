@@ -275,30 +275,49 @@ public class AdminController {
         ));
     }
 
-    @GetMapping("/funcionarios/{email}/encuentros")
-    public ResponseEntity<?> encuentrosFuncionario(@PathVariable String email) {
+    @GetMapping("/funcionarios/{email}/asignaciones")
+    public ResponseEntity<?> asignacionesFuncionario(@PathVariable String email) {
         return ResponseEntity.ok(asignadoARepo.findByEmailFuncionario(email));
     }
 
-    @PostMapping("/funcionarios/{email}/encuentros/{idEncuentro}")
-    public ResponseEntity<?> asignarEncuentro(@PathVariable String email, @PathVariable Integer idEncuentro) {
+    @PostMapping("/funcionarios/{email}/encuentros/{idEncuentro}/sectores/{letraSector}")
+    public ResponseEntity<?> asignarSector(@PathVariable String email,
+                                           @PathVariable Integer idEncuentro,
+                                           @PathVariable String letraSector) {
         if (!funcionarioRepo.existsById(email))
             return ResponseEntity.badRequest().body(Map.of("error", "Funcionario no encontrado"));
-        if (!encuentroRepo.existsById(idEncuentro))
-            return ResponseEntity.badRequest().body(Map.of("error", "Encuentro no encontrado"));
-        if (asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(email, idEncuentro))
-            return ResponseEntity.badRequest().body(Map.of("error", "Ya está asignado a este encuentro"));
+
+        Encuentro enc = encuentroRepo.findById(idEncuentro)
+            .orElseThrow(() -> new RuntimeException("Encuentro no encontrado"));
+        Integer idEstadio = enc.getEstadio().getIdEstadio();
+
+        TieneHabilitado.TieneHabilitadoId thId = new TieneHabilitado.TieneHabilitadoId();
+        thId.setIdEncuentro(idEncuentro);
+        thId.setLetra(letraSector);
+        thId.setIdEstadio(idEstadio);
+        if (!tieneHabilitadoRepo.existsById(thId))
+            return ResponseEntity.badRequest().body(Map.of("error", "El sector " + letraSector + " no está habilitado para este encuentro"));
+
+        if (asignadoARepo.existsByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(email, idEncuentro, letraSector, idEstadio))
+            return ResponseEntity.badRequest().body(Map.of("error", "Ya está asignado a este sector"));
 
         AsignadoA a = new AsignadoA();
         a.setEmailFuncionario(email);
         a.setIdEncuentro(idEncuentro);
+        a.setLetraSector(letraSector);
+        a.setIdEstadio(idEstadio);
         return ResponseEntity.ok(asignadoARepo.save(a));
     }
 
     @Transactional
-    @DeleteMapping("/funcionarios/{email}/encuentros/{idEncuentro}")
-    public ResponseEntity<?> desasignarEncuentro(@PathVariable String email, @PathVariable Integer idEncuentro) {
-        asignadoARepo.deleteByEmailFuncionarioAndIdEncuentro(email, idEncuentro);
+    @DeleteMapping("/funcionarios/{email}/encuentros/{idEncuentro}/sectores/{letraSector}")
+    public ResponseEntity<?> desasignarSector(@PathVariable String email,
+                                              @PathVariable Integer idEncuentro,
+                                              @PathVariable String letraSector) {
+        Encuentro enc = encuentroRepo.findById(idEncuentro)
+            .orElseThrow(() -> new RuntimeException("Encuentro no encontrado"));
+        asignadoARepo.deleteByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(
+            email, idEncuentro, letraSector, enc.getEstadio().getIdEstadio());
         return ResponseEntity.ok().build();
     }
 

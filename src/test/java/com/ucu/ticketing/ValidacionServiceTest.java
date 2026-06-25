@@ -38,6 +38,8 @@ class ValidacionServiceTest {
     private static final String DISPOSITIVO = "DISP-001";
     private static final String EMAIL_FUNCIONARIO = "funcionario@test.com";
     private static final int ID_ENCUENTRO = 1;
+    private static final String LETRA_SECTOR = "A";
+    private static final int ID_ESTADIO = 10;
 
     @BeforeEach
     void setUp() {
@@ -50,6 +52,8 @@ class ValidacionServiceTest {
         entrada.setQrTokenActual(TOKEN);
         entrada.setQrTokenExpiraEn(LocalDateTime.now().plusMinutes(5));
         entrada.setEncuentro(encuentro);
+        entrada.setLetraSector(LETRA_SECTOR);
+        entrada.setIdEstadio(ID_ESTADIO);
 
         funcionario = new FuncionarioValidacion();
         funcionario.setEmail(EMAIL_FUNCIONARIO);
@@ -59,7 +63,8 @@ class ValidacionServiceTest {
 
         when(entradaRepo.findByQrTokenActual(TOKEN)).thenReturn(Optional.of(entrada));
         when(entradaRepo.findByQrTokenActual(argThat(t -> !TOKEN.equals(t)))).thenReturn(Optional.empty());
-        when(asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(EMAIL_FUNCIONARIO, ID_ENCUENTRO)).thenReturn(true);
+        when(asignadoARepo.existsByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(
+                EMAIL_FUNCIONARIO, ID_ENCUENTRO, LETRA_SECTOR, ID_ESTADIO)).thenReturn(true);
         when(tieneAsignadoRepo.findByEmailFuncionario(EMAIL_FUNCIONARIO)).thenReturn(List.of(ta));
         when(funcionarioRepo.findById(EMAIL_FUNCIONARIO)).thenReturn(Optional.of(funcionario));
         when(entradaRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -124,7 +129,8 @@ class ValidacionServiceTest {
 
     @Test
     void escanear_funcionarioNoAsignadoAlEncuentro_lanzaExcepcion() {
-        when(asignadoARepo.existsByEmailFuncionarioAndIdEncuentro(EMAIL_FUNCIONARIO, ID_ENCUENTRO)).thenReturn(false);
+        when(asignadoARepo.existsByEmailFuncionarioAndIdEncuentroAndLetraSectorAndIdEstadio(
+                EMAIL_FUNCIONARIO, ID_ENCUENTRO, LETRA_SECTOR, ID_ESTADIO)).thenReturn(false);
 
         RuntimeException ex = assertThrows(RuntimeException.class,
             () -> validacionService.escanear(TOKEN, EMAIL_FUNCIONARIO));

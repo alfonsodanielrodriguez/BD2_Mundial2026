@@ -35,3 +35,6 @@ build/
 ### Frontend ###
 ticketing-front/node_modules/
 ticketing-front/dist/
+
+### Local config (credentials) ###
+src/main/resources/application-local.properties
