@@ -24,14 +24,15 @@ Sistema integral de ticketing para la comercialización, transferencia y validac
 
 ## Flujo de prueba completo
 
-1. **Loguearse como ADMIN** → crear un equipo, un estadio, un encuentro → habilitar sectores con precio
-2. **Registrar un USER** desde la pantalla de registro
-3. **Como USER** → comprar entradas para el encuentro creado
-4. Opcionalmente: **transferir** una entrada a otro usuario registrado y aceptarla
-5. **En la tab "Entradas"** → el token QR aparece automáticamente y se renueva cada 30 segundos
-6. **Loguearse como FUNCIONARIO** → ir a "Validar" → ingresar el ID de la entrada, `DISP-001` como dispositivo, y el token QR visible en la pantalla del usuario
-7. Verificar que la entrada queda como **consumida**
-8. **Como ADMIN** → ver Rankings
+1. **Loguearse como ADMIN** → crear equipos, un estadio, un encuentro → habilitar sectores con precio
+2. **Como ADMIN** → en la tab "Funcionarios" → asignar el funcionario al sector habilitado del encuentro creado
+3. **Registrar un USER** desde la pantalla de registro
+4. **Como USER** → comprar entradas: seleccioná encuentro/sector/cantidad → "Reservar" → "Confirmar compra"
+5. Opcionalmente: **transferir** una entrada a otro usuario registrado y aceptarla
+6. **En la tab "Entradas"** → el token QR aparece automáticamente y se renueva cada 30 segundos
+7. **Loguearse como FUNCIONARIO** → ir a "Validar entrada" → ingresar el token QR visible en la pantalla del usuario
+8. Verificar que la entrada queda como **consumida**
+9. **Como ADMIN** → ver Rankings
 
 ---
 
@@ -41,19 +42,23 @@ Sistema integral de ticketing para la comercialización, transferencia y validac
 - Java 21
 - Maven 3.9+
 - Node.js 18+
-- Acceso a la BD MySQL de la UCU (o configurar una BD local)
+- Credenciales de la BD MySQL del grupo (pedirlas a un integrante del equipo)
 
 ### Backend
 
-Crear el archivo `src/main/resources/application-local.properties` con las credenciales:
+El archivo `src/main/resources/application.properties` ya existe en el repo y contiene la configuración base (no tocar). Para correr localmente hay que crear un archivo **adicional** que no se commitea al repo:
+
+`src/main/resources/application-local.properties`
 
 ```properties
 spring.datasource.url=jdbc:mysql://mysql.reto-ucu.net:50006/XR_Grupo5?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
 spring.datasource.username=xr_g5_admin
-spring.datasource.password=<password>
+spring.datasource.password=PEDIR_AL_EQUIPO
 ```
 
-Luego ejecutar:
+> Este archivo está en `.gitignore` por seguridad. Nunca commitear credenciales.
+
+Luego ejecutar con el perfil local:
 
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
@@ -69,7 +74,7 @@ npm install
 npm run dev
 ```
 
-El frontend queda disponible en `http://localhost:5173`. El proxy de Vite redirige automáticamente las llamadas a `/api/*` al backend en el puerto 8080.
+El frontend queda disponible en `http://localhost:5173`. El proxy de Vite redirige automáticamente las llamadas a `/api/*` al backend en el puerto 8080, por lo que no hay que cambiar ninguna URL.
 
 ### Tests
 
@@ -77,7 +82,7 @@ El frontend queda disponible en `http://localhost:5173`. El proxy de Vite rediri
 ./mvnw test
 ```
 
-Se ejecutan 30 tests unitarios sobre la lógica de negocio (CompraService, TransferenciaService, ValidacionService, AuthService). No requieren conexión a la base de datos.
+Se ejecutan 30 tests unitarios sobre la lógica de negocio (CompraService, TransferenciaService, ValidacionService, AuthService). No requieren conexión a la base de datos ni el archivo `application-local.properties`.
 
 ---
 

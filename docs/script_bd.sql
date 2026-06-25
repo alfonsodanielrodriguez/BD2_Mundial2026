@@ -120,14 +120,16 @@ CREATE TABLE ENTRADA (
     letra_sector            VARCHAR(1)      NOT NULL,
     id_estadio              INT             NOT NULL,
     propietario_actual      VARCHAR(150)    NOT NULL,
-    estado                  ENUM('activa','consumida','transferida_pendiente') NOT NULL DEFAULT 'activa',
+    estado                  ENUM('activa','consumida','transferida_pendiente','reservada') NOT NULL DEFAULT 'activa',
     cantidad_transferencias TINYINT         NOT NULL DEFAULT 0,
     qr_token_actual         VARCHAR(255),
     qr_token_expira_en      DATETIME,
+    id_compra               INT,
     PRIMARY KEY (id_entrada),
     FOREIGN KEY (id_encuentro)              REFERENCES ENCUENTRO(id_encuentro),
     FOREIGN KEY (letra_sector, id_estadio)  REFERENCES SECTOR(letra, id_estadio),
-    FOREIGN KEY (propietario_actual)        REFERENCES USUARIO_GENERAL(direccion_correo_electronico)
+    FOREIGN KEY (propietario_actual)        REFERENCES USUARIO_GENERAL(direccion_correo_electronico),
+    FOREIGN KEY (id_compra)                 REFERENCES COMPRA(id_compra)
 );
 
 CREATE TABLE TRANSFERENCIA (
@@ -159,6 +161,16 @@ CREATE TABLE TIENE_ASIGNADO (
     FOREIGN KEY (direccion_correo_funcionario) REFERENCES FUNCIONARIO_DE_VALIDACION(direccion_correo_electronico),
     FOREIGN KEY (id_dispositivo)               REFERENCES DISPOSITIVO_ESCANEO_AUTORIZADO(id_dispositivo)
 );
+
+CREATE TABLE ASIGNADO_A (
+    direccion_correo_funcionario VARCHAR(150) NOT NULL,
+    id_encuentro                 INT          NOT NULL,
+    letra_sector                 VARCHAR(1)   NOT NULL,
+    id_estadio                   INT          NOT NULL,
+    PRIMARY KEY (direccion_correo_funcionario, id_encuentro, letra_sector, id_estadio),
+    FOREIGN KEY (direccion_correo_funcionario)            REFERENCES FUNCIONARIO_DE_VALIDACION(direccion_correo_electronico),
+    FOREIGN KEY (id_encuentro, letra_sector, id_estadio) REFERENCES TIENE_HABILITADO(id_encuentro, letra, id_estadio)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE VALIDA (
     id_dispositivo                  VARCHAR(100) NOT NULL,

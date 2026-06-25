@@ -114,10 +114,11 @@ Se documenta el pasaje del MER al modelo relacional. Las claves primarias se ind
 | letra_sector | VARCHAR(1) | NOT NULL |
 | id_estadio | INT | NOT NULL, *FK → SECTOR(letra, id_estadio)* |
 | propietario_actual | VARCHAR(150) | NOT NULL, *FK → USUARIO_GENERAL* |
-| estado | ENUM('activa','consumida','transferida_pendiente') | NOT NULL |
+| estado | ENUM('activa','consumida','transferida_pendiente','reservada') | NOT NULL |
 | cantidad_transferencias | TINYINT | NOT NULL, DEFAULT 0 |
 | qr_token_actual | VARCHAR(255) | |
 | qr_token_expira_en | DATETIME | |
+| id_compra | INT | *FK → COMPRA* (nullable, vincula la entrada a su compra durante el flujo de dos pasos) |
 
 ### TRANSFERENCIA
 | Columna | Tipo | Restricciones |
@@ -145,6 +146,19 @@ Se documenta el pasaje del MER al modelo relacional. Las claves primarias se ind
 |---|---|---|
 | **direccion_correo_funcionario** | VARCHAR(150) | PK, *FK → FUNCIONARIO_DE_VALIDACION* |
 | **id_dispositivo** | VARCHAR(100) | PK, *FK → DISPOSITIVO_ESCANEO_AUTORIZADO* |
+
+### ASIGNADO_A
+
+Representa la relación "Valida en" del MER: la agregación (Funcionario + Dispositivo) se valida contra la agregación (Sector + Encuentro). Un funcionario queda habilitado para validar entradas de un sector específico en un encuentro específico.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| **direccion_correo_funcionario** | VARCHAR(150) | PK, *FK → FUNCIONARIO_DE_VALIDACION* |
+| **id_encuentro** | INT | PK, *FK → TIENE_HABILITADO* |
+| **letra_sector** | VARCHAR(1) | PK, *FK → TIENE_HABILITADO* |
+| **id_estadio** | INT | PK, *FK → TIENE_HABILITADO* |
+
+La FK compuesta `(id_encuentro, letra_sector, id_estadio)` referencia a `TIENE_HABILITADO`, garantizando que solo se puede asignar un funcionario a sectores efectivamente habilitados para ese encuentro.
 
 ### VALIDA
 | Columna | Tipo | Restricciones |
